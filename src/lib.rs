@@ -19,6 +19,7 @@ pub type ConsulFuture<T, E> = Box<Future<Item = T, Error = Error<E>> + Send>;
 /// Currently only the KV api is available, with more to come.
 ///
 /// [consul]: https://www.hashicorp.com/products/consul
+#[derive(Debug)]
 pub struct Consul<T> {
     base: Url,
     inner: T,
