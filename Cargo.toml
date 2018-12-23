@@ -20,7 +20,6 @@ tower-service = "0.2"
 hyper = "0.12"
 
 [patch.crates-io]
-consul = { git = "https://github.com/stusmall/consul-rust", rev = "2414abd9e85b2f4fe52e689960453a0dd0a2e1ef"}
 tower-service = { git = "https://github.com/tower-rs/tower" }
 tower-direct-service = { git = "https://github.com/tower-rs/tower" }
 tower-buffer = { git = "https://github.com/tower-rs/tower" }

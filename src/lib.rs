@@ -133,6 +133,18 @@ where
     }
 }
 
+impl<T> Clone for Consul<T>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        Consul {
+            base: self.base.clone(),
+            inner: self.inner.clone(),
+        }
+    }
+}
+
 #[derive(Debug)]
 /// The Error returned by the client
 pub enum Error<E> {
