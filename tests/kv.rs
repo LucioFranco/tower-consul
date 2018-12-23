@@ -38,7 +38,11 @@ fn get_one() {
     let mut rt = Runtime::new().unwrap();
     let response = rt.block_on(client.get("tower-consul/test-key"));
 
-    response.unwrap();
+    let mut values = response.unwrap();
+
+    let value = values.pop().unwrap();
+
+    assert_eq!(value.key, "tower-consul/test-key");
 
     consul_del("tower-consul/test-key");
 }

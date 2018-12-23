@@ -37,7 +37,7 @@ where
     }
 
     /// Get a list of all Service members
-    pub fn get(&mut self, key: &str) -> ConsulFuture<Vec<KVGet>, T::Error> {
+    pub fn get(&mut self, key: &str) -> ConsulFuture<Vec<KVValue>, T::Error> {
         let url = "/v1/kv/".to_owned() + key;
         let request = match self.build(url, Method::GET, Vec::new()) {
             Ok(req) => req,
@@ -134,6 +134,7 @@ where
 }
 
 #[derive(Debug)]
+/// The Error returned by the client
 pub enum Error<E> {
     NotFound,
     ConsulClient(String),
@@ -170,13 +171,17 @@ impl<E> From<http::Error> for Error<E> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(non_snake_case)]
-pub struct KVGet {
-    CreateIndex: i64,
-    ModifyIndex: i64,
-    LockIndex: i64,
-    Key: String,
-    Flags: u8,
-    Value: String,
-    Session: Option<String>,
+#[serde(rename_all = "PascalCase")]
+/// The value returned from consul
+///
+/// For more information on this go [here][value]
+/// [value]: https://www.consul.io/api/kv.html#read-key
+pub struct KVValue {
+    pub create_index: i64,
+    pub modify_index: i64,
+    pub lock_index: i64,
+    pub key: String,
+    pub flags: u8,
+    pub value: String,
+    pub session: Option<String>,
 }
