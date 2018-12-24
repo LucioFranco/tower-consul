@@ -1,0 +1,7 @@
+{
+    "service": {
+	"name": "tower-consul",
+	"tags": ["mock", "test"],
+	"port": 80
+    }
+}

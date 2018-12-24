@@ -14,7 +14,7 @@ fn get_services() -> impl Future<Item = (), Error = ()> {
         Err(_) => panic!("Unable to spawn"),
     };
 
-    let mut consul = Consul::new(client, "http://localhost:8500");
+    let mut consul = Consul::new(client, "http".into(), "localhost:8500".into());
 
     consul
         .get("my-key")

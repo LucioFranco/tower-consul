@@ -1,12 +1,13 @@
 use futures::{Async, Future, Poll, Stream};
 use hyper::{client::HttpConnector, Body, Client, Request, Response};
+use serde::Serialize;
 use std::panic;
 use std::process::{Command, Stdio};
 use tokio::runtime::Runtime;
 use tower_consul::Consul;
 use tower_service::Service;
 
-static CONSUL_ADDRESS: &'static str = "http://127.0.0.1:8500";
+static CONSUL_ADDRESS: &'static str = "127.0.0.1:8500";
 
 #[test]
 fn _check_consul() {
@@ -104,8 +105,50 @@ fn delete_key() {
     assert!(response.is_err());
 }
 
+#[test]
+fn service_nodes() {
+    consul_register();
+
+    let mut client = client();
+
+    let mut rt = Runtime::new().unwrap();
+    let response = rt.block_on(client.service_nodes("tower-consul"));
+
+    let services = response.unwrap();
+
+    assert_eq!(services.len(), 1);
+
+    consul_deregister();
+}
+
+#[test]
+fn register_service() {
+    #[derive(Serialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct MockService {
+        name: String,
+        tags: Vec<String>,
+        port: u16,
+    }
+
+    let mock = MockService {
+        name: "tower-consul-mock-service".into(),
+        tags: vec!["mock".into(), "test".into()],
+        port: 12345,
+    };
+
+    let buf = serde_json::to_vec(&mock).unwrap();
+
+    let mut client = client();
+
+    let mut rt = Runtime::new().unwrap();
+    let response = rt.block_on(client.register(buf));
+
+    let _services = response.unwrap();
+}
+
 fn client() -> Consul<Hyper> {
-    Consul::new(Hyper(Client::new()), CONSUL_ADDRESS)
+    Consul::new(Hyper(Client::new()), "http".into(), CONSUL_ADDRESS.into())
 }
 
 struct Hyper(Client<HttpConnector, Body>);
@@ -159,6 +202,30 @@ fn consul_del(key: &str) {
         .arg("kv")
         .arg("delete")
         .arg(key)
+        .stdout(Stdio::null())
+        .spawn()
+        .unwrap()
+        .wait()
+        .unwrap();
+}
+
+fn consul_register() {
+    Command::new("consul")
+        .arg("services")
+        .arg("register")
+        .arg("tests/mock-service.json")
+        .stdout(Stdio::null())
+        .spawn()
+        .unwrap()
+        .wait()
+        .unwrap();
+}
+
+fn consul_deregister() {
+    Command::new("consul")
+        .arg("services")
+        .arg("deregister")
+        .arg("tests/mock-service.json")
         .stdout(Stdio::null())
         .spawn()
         .unwrap()
