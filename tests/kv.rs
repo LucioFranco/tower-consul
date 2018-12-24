@@ -10,7 +10,7 @@ use tower_service::Service;
 static CONSUL_ADDRESS: &'static str = "127.0.0.1:8500";
 
 #[test]
-fn _check_consul() {
+fn check_consul() {
     Command::new("consul")
         .arg("--version")
         .stdout(Stdio::null())
