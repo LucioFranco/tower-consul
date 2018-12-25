@@ -37,8 +37,13 @@ where
     T::Error: Send + 'static,
 {
     /// Create a new consul client
-    pub fn new(inner: T, scheme: String, authority: String) -> Result<Self, SpawnError<T>> {
-        let inner = Buffer::new(inner, 100)?;
+    pub fn new(
+        inner: T,
+        bound: usize,
+        scheme: String,
+        authority: String,
+    ) -> Result<Self, SpawnError<T>> {
+        let inner = Buffer::new(inner, bound)?;
 
         Ok(Consul {
             scheme,
