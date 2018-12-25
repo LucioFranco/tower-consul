@@ -5,7 +5,9 @@ use http::{Method, Request, Response, StatusCode, Uri};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::string::FromUtf8Error;
-use tower_http::HttpService;
+use tower_buffer::{Buffer, Error as BufferError, SpawnError};
+// use tower_http::HttpService;
+use tower_service::Service;
 
 /// The future returned by Consul requests where `T` is the response
 /// and `E` is the inner Http error.
@@ -18,26 +20,31 @@ pub type ConsulFuture<T, E> = Box<Future<Item = T, Error = Error<E>> + Send>;
 /// Currently only the KV api is available, with more to come.
 ///
 /// [consul]: https://www.hashicorp.com/products/consul
-#[derive(Debug)]
-pub struct Consul<T> {
+#[derive(Clone)]
+pub struct Consul<T>
+where
+    T: Service<Request<Vec<u8>>, Response = Response<Vec<u8>>> + Send,
+{
     scheme: String,
     authority: String,
-    inner: T,
+    inner: Buffer<T, Request<Vec<u8>>>,
 }
 
 impl<T> Consul<T>
 where
-    T: HttpService<Vec<u8>, ResponseBody = Vec<u8>>,
+    T: Service<Request<Vec<u8>>, Response = Response<Vec<u8>>> + Send + 'static,
     T::Future: Send + 'static,
     T::Error: Send + 'static,
 {
     /// Create a new consul client
-    pub fn new(inner: T, scheme: String, authority: String) -> Self {
-        Consul {
+    pub fn new(inner: T, scheme: String, authority: String) -> Result<Self, SpawnError<T>> {
+        let inner = Buffer::new(inner, 100)?;
+
+        Ok(Consul {
             scheme,
             authority,
             inner,
-        }
+        })
     }
 
     /// Get a list of all Service members
@@ -85,7 +92,7 @@ where
     }
 
     /// Get a list of nodes that have registered via the provided service
-    pub fn service_nodes(&mut self, service: &str) -> ConsulFuture<Vec<Service>, T::Error> {
+    pub fn service_nodes(&mut self, service: &str) -> ConsulFuture<Vec<ConsulService>, T::Error> {
         let url = format!("/v1/catalog/service/{}", service);
         let request = match self.build(&url, Method::GET, Vec::new()) {
             Ok(req) => req,
@@ -128,7 +135,9 @@ where
                 Ok(res) => Self::handle_status(res),
                 Err(e) => Err(e),
             })
-            .and_then(|body| serde_json::from_slice(body.as_slice()).map_err(Error::from));
+            .and_then(|body| {
+                serde_json::from_slice(body.into_body().as_slice()).map_err(Error::from)
+            });
 
         Box::new(fut)
     }
@@ -152,11 +161,11 @@ where
             .map_err(Error::from)
     }
 
-    fn handle_status(response: Response<T::ResponseBody>) -> Result<Vec<u8>, Error<T::Error>> {
+    fn handle_status(response: Response<Vec<u8>>) -> Result<Response<Vec<u8>>, Error<T::Error>> {
         let status = response.status();
 
         if status.is_success() | status.is_redirection() | status.is_informational() {
-            Ok(response.into_body())
+            Ok(response)
         } else if status == StatusCode::NOT_FOUND {
             Err(Error::NotFound)
         } else if status.is_client_error() {
@@ -171,18 +180,18 @@ where
     }
 }
 
-impl<T> Clone for Consul<T>
-where
-    T: Clone,
-{
-    fn clone(&self) -> Self {
-        Consul {
-            scheme: self.scheme.clone(),
-            authority: self.authority.clone(),
-            inner: self.inner.clone(),
-        }
-    }
-}
+// impl<T> Clone for Consul<T>
+// where
+//     T: HttpService<Vec<u8>> + Clone,
+// {
+//     fn clone(&self) -> Self {
+//         Consul {
+//             scheme: self.scheme.clone(),
+//             authority: self.authority.clone(),
+//             inner: self.inner.clone(),
+//         }
+//     }
+// }
 
 #[derive(Debug)]
 /// The Error returned by the client
@@ -190,7 +199,7 @@ pub enum Error<E> {
     NotFound,
     ConsulClient(String),
     ConsulServer(String),
-    Inner(E),
+    Inner(BufferError<E>),
     Http(http::Error),
     Json(serde_json::Error),
     StringUtf8(FromUtf8Error),
@@ -236,7 +245,7 @@ pub struct KVValue {
 ///
 /// For more information on this go [here][value]
 /// [value]: https://www.consul.io/api/agent/service.html#sample-response-1
-pub struct Service {
+pub struct ConsulService {
     #[serde(rename = "ServiceKind")]
     pub kind: String,
     #[serde(rename = "ID")]

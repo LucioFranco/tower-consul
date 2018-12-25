@@ -1,20 +1,21 @@
-use futures::{future, Async, Future, Poll, Stream};
-use hyper::{client::HttpConnector, Body, Client, Request, Response};
-use tower_buffer::Buffer;
+use futures::{future, Future, Stream};
+use hyper::{Body, Client, Request, Response};
 use tower_consul::Consul;
-use tower_service::Service;
+use tower_util::ServiceFn;
+
+static CONSUL_ADDRESS: &'static str = "127.0.0.1:8500";
 
 fn main() {
-    tokio::run(future::lazy(|| get_services()))
+    hyper::rt::run(future::lazy(|| get_services()))
 }
 
 fn get_services() -> impl Future<Item = (), Error = ()> {
-    let client = match Buffer::new(Hyper(Client::new()), 100) {
-        Ok(c) => c,
-        Err(_) => panic!("Unable to spawn"),
-    };
+    let hyper = ServiceFn::new(hyper);
 
-    let mut consul = Consul::new(client, "http".into(), "localhost:8500".into());
+    let mut consul = match Consul::new(hyper, "http".into(), CONSUL_ADDRESS.into()) {
+        Ok(c) => c,
+        Err(_) => panic!("Unable to spawn!"),
+    };
 
     consul
         .get("my-key")
@@ -25,35 +26,19 @@ fn get_services() -> impl Future<Item = (), Error = ()> {
         .map_err(|e| panic!("{:?}", e))
 }
 
-struct Hyper(Client<HttpConnector, Body>);
+fn hyper(req: Request<Vec<u8>>) -> impl Future<Item = Response<Vec<u8>>, Error = hyper::Error> {
+    let client = Client::new();
 
-impl Service<Request<Vec<u8>>> for Hyper {
-    type Response = Response<Vec<u8>>;
-    type Error = hyper::Error;
-    type Future = Box<Future<Item = Self::Response, Error = Self::Error> + Send>;
-
-    fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-        Ok(Async::Ready(()))
-    }
-
-    fn call(&mut self, req: Request<Vec<u8>>) -> Self::Future {
-        let f = self
-            .0
-            .request(req.map(Body::from))
-            .and_then(|res| {
-                let status = res.status().clone();
-                let headers = res.headers().clone();
-
-                res.into_body().concat2().join(Ok((status, headers)))
-            })
-            .and_then(|(body, (status, _headers))| {
-                Ok(Response::builder()
-                    .status(status)
-                    // .headers(headers)
-                    .body(body.to_vec())
-                    .unwrap())
-            });
-
-        Box::new(f)
-    }
+    client
+        .request(req.map(Body::from))
+        .and_then(|res| {
+            let status = res.status().clone();
+            res.into_body().concat2().join(Ok(status))
+        })
+        .and_then(|(body, status)| {
+            Ok(Response::builder()
+                .status(status)
+                .body(body.to_vec())
+                .unwrap())
+        })
 }
