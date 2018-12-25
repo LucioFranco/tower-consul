@@ -6,8 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::string::FromUtf8Error;
 use tower_buffer::{Buffer, Error as BufferError, SpawnError};
-// use tower_http::HttpService;
-use tower_service::Service;
+use tower_http::{service::LiftService, HttpService};
 
 /// The future returned by Consul requests where `T` is the response
 /// and `E` is the inner Http error.
@@ -23,16 +22,16 @@ pub type ConsulFuture<T, E> = Box<Future<Item = T, Error = Error<E>> + Send>;
 #[derive(Clone)]
 pub struct Consul<T>
 where
-    T: Service<Request<Vec<u8>>, Response = Response<Vec<u8>>> + Send,
+    T: HttpService<Vec<u8>>,
 {
     scheme: String,
     authority: String,
-    inner: Buffer<T, Request<Vec<u8>>>,
+    inner: Buffer<LiftService<T>, Request<Vec<u8>>>,
 }
 
 impl<T> Consul<T>
 where
-    T: Service<Request<Vec<u8>>, Response = Response<Vec<u8>>> + Send + 'static,
+    T: HttpService<Vec<u8>, ResponseBody = Response<Vec<u8>>> + Send + 'static,
     T::Future: Send + 'static,
     T::Error: Send + 'static,
 {
@@ -42,8 +41,8 @@ where
         bound: usize,
         scheme: String,
         authority: String,
-    ) -> Result<Self, SpawnError<T>> {
-        let inner = Buffer::new(inner, bound)?;
+    ) -> Result<Self, Error<T::Error>> {
+        let inner = Buffer::new(inner.lift(), bound)?;
 
         Ok(Consul {
             scheme,
@@ -120,7 +119,7 @@ where
             .call(request)
             .map_err(|e| Error::Inner(e))
             .then(|res| match res {
-                Ok(res) => Self::handle_status(res),
+                Ok(res) => Self::handle_status(res.into_body()),
                 Err(e) => Err(e),
             })
             .map(|_| ());
@@ -137,7 +136,7 @@ where
             .call(request)
             .map_err(|e| Error::Inner(e))
             .then(|res| match res {
-                Ok(res) => Self::handle_status(res),
+                Ok(res) => Self::handle_status(res.into_body()),
                 Err(e) => Err(e),
             })
             .and_then(|body| {
@@ -208,6 +207,7 @@ pub enum Error<E> {
     Http(http::Error),
     Json(serde_json::Error),
     StringUtf8(FromUtf8Error),
+    SpawnError,
 }
 
 impl<E> From<serde_json::Error> for Error<E> {
@@ -225,6 +225,12 @@ impl<E> From<FromUtf8Error> for Error<E> {
 impl<E> From<http::Error> for Error<E> {
     fn from(e: http::Error) -> Self {
         Error::Http(e)
+    }
+}
+
+impl<E, T> From<tower_buffer::SpawnError<T>> for Error<E> {
+    fn from(_: SpawnError<T>) -> Self {
+        Error::SpawnError
     }
 }
 
