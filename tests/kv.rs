@@ -172,7 +172,7 @@ where
 {
     let hyper = ServiceFn::new(f);
 
-    match Consul::new(hyper, "http".into(), CONSUL_ADDRESS.into()) {
+    match Consul::new(hyper, 100, "http".into(), CONSUL_ADDRESS.into()) {
         Ok(c) => c,
         Err(_) => panic!("Unable to spawn!"),
     }

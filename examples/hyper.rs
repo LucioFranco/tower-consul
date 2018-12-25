@@ -12,7 +12,7 @@ fn main() {
 fn get_services() -> impl Future<Item = (), Error = ()> {
     let hyper = ServiceFn::new(hyper);
 
-    let mut consul = match Consul::new(hyper, "http".into(), CONSUL_ADDRESS.into()) {
+    let mut consul = match Consul::new(hyper, 100, "http".into(), CONSUL_ADDRESS.into()) {
         Ok(c) => c,
         Err(_) => panic!("Unable to spawn!"),
     };

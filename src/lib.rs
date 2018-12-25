@@ -31,7 +31,7 @@ where
 
 impl<T> Consul<T>
 where
-    T: HttpService<Vec<u8>, ResponseBody = Response<Vec<u8>>> + Send + 'static,
+    T: HttpService<Vec<u8>, ResponseBody = Vec<u8>> + Send + 'static,
     T::Future: Send + 'static,
     T::Error: Send + 'static,
 {
@@ -119,7 +119,7 @@ where
             .call(request)
             .map_err(|e| Error::Inner(e))
             .then(|res| match res {
-                Ok(res) => Self::handle_status(res.into_body()),
+                Ok(res) => Self::handle_status(res),
                 Err(e) => Err(e),
             })
             .map(|_| ());
@@ -136,7 +136,7 @@ where
             .call(request)
             .map_err(|e| Error::Inner(e))
             .then(|res| match res {
-                Ok(res) => Self::handle_status(res.into_body()),
+                Ok(res) => Self::handle_status(res),
                 Err(e) => Err(e),
             })
             .and_then(|body| {
