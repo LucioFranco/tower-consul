@@ -10,6 +10,8 @@ rust:
 
 matrix:
   fast_finish: true
+  allow_failures:
+  - rust: nightly
 
 script:
   - rustup component add rustfmt
