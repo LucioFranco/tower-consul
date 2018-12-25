@@ -15,3 +15,20 @@ script:
   - rustup component add rustfmt
   - cargo fmt -- --check
   - cargo test --all --all-features
+
+env:
+  global:
+    - CONSUL_VERSION=1.4.0
+    - CONSUL_DC=dev1
+    - CONSUL_DIR=$HOME/consul_$CONSUL_VERSION
+
+before_script:
+  - 'if [[ ! -f $CONSUL_DIR/consul ]]; then (mkdir -p $CONSUL_DIR && cd $CONSUL_DIR && wget https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL_VERSION}_linux_amd64.zip && unzip ${CONSUL_VERSION}_linux_amd64.zip); fi'
+  - $CONSUL_DIR/consul --version
+  - $CONSUL_DIR/consul agent -dev
+  # Wait for consul to elect itself as leader
+  - sleep 5
+
+cache:
+  directories:
+    - $CONSUL_DIR
