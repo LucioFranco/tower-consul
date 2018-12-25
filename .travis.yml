@@ -1,0 +1,17 @@
+language: rust
+
+os:
+- linux
+
+rust:
+  - stable
+  - beta
+  - nightly
+
+matrix:
+  fast_finish: true
+
+script:
+  - rustup component add rustfmt
+  - cargo fmt -- --check
+  - cargo test --all --all-features
