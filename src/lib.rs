@@ -186,19 +186,6 @@ where
     }
 }
 
-// impl<T> Clone for Consul<T>
-// where
-//     T: HttpService<Vec<u8>> + Clone,
-// {
-//     fn clone(&self) -> Self {
-//         Consul {
-//             scheme: self.scheme.clone(),
-//             authority: self.authority.clone(),
-//             inner: self.inner.clone(),
-//         }
-//     }
-// }
-
 #[derive(Debug)]
 /// The Error returned by the client
 pub enum Error<E> {
