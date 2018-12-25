@@ -1,5 +1,7 @@
 //! Tower based HttpService interface to Consul
 
+#![warn(missing_docs)]
+
 use futures::{future, Future};
 use http::{Method, Request, Response, StatusCode, Uri};
 use serde::{Deserialize, Serialize};
@@ -200,13 +202,22 @@ where
 #[derive(Debug)]
 /// The Error returned by the client
 pub enum Error<E> {
+    /// The requested resource does not exist
     NotFound,
+    /// The consul http request returned a `4xx` response that is not
+    /// a `404`
     ConsulClient(String),
+    /// The consul http request returned a `5xx` response
     ConsulServer(String),
+    /// The inner service returned an error
     Inner(BufferError<E>),
+    /// There was an error creating and reading Response/Requests
     Http(http::Error),
+    /// The error returned if the json parsing has failed
     Json(serde_json::Error),
+    /// Error parsing the response string as utf8
     StringUtf8(FromUtf8Error),
+    /// Error attempting to spawn the Buffer service
     SpawnError,
 }
 
@@ -236,6 +247,7 @@ impl<E, T> From<tower_buffer::SpawnError<T>> for Error<E> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
+#[allow(missing_docs)]
 /// The value returned from consul
 ///
 /// For more information on this go [here][value]
@@ -252,6 +264,7 @@ pub struct KVValue {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
+#[allow(missing_docs)]
 /// The value returned from Consul on Service requests
 ///
 /// For more information on this go [here][value]
