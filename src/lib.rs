@@ -2,6 +2,7 @@
 
 #![warn(missing_docs)]
 
+use bytes::Bytes;
 use futures::{future, Future};
 use http::{Method, Request, Response, StatusCode, Uri};
 use serde::{Deserialize, Serialize};
@@ -16,7 +17,7 @@ pub type ConsulFuture<T, E> = Box<Future<Item = T, Error = Error<E>> + Send>;
 
 /// Create new [Consul][consul] service that will talk with
 /// the consul agent api. It takes some `HttpService` that takes
-/// `Vec<u8>` and returns `Vec<u8>`.
+/// `Bytes` and returns `Bytes`.
 ///
 /// Currently only the KV api is available, with more to come.
 ///
@@ -24,16 +25,16 @@ pub type ConsulFuture<T, E> = Box<Future<Item = T, Error = Error<E>> + Send>;
 #[derive(Clone)]
 pub struct Consul<T>
 where
-    T: HttpService<Vec<u8>>,
+    T: HttpService<Bytes>,
 {
     scheme: String,
     authority: String,
-    inner: Buffer<LiftService<T>, Request<Vec<u8>>>,
+    inner: Buffer<LiftService<T>, Request<Bytes>>,
 }
 
 impl<T> Consul<T>
 where
-    T: HttpService<Vec<u8>, ResponseBody = Vec<u8>> + Send + 'static,
+    T: HttpService<Bytes, ResponseBody = Bytes> + Send + 'static,
     T::Future: Send + 'static,
     T::Error: Send + 'static,
 {
@@ -56,7 +57,7 @@ where
     /// Get a list of all Service members
     pub fn get(&mut self, key: &str) -> ConsulFuture<Vec<KVValue>, T::Error> {
         let url = format!("/v1/kv/{}", key);
-        let request = match self.build(&url, Method::GET, Vec::new()) {
+        let request = match self.build(&url, Method::GET, Bytes::new()) {
             Ok(req) => req,
             Err(e) => return Box::new(future::lazy(move || Box::new(future::err(e)))),
         };
@@ -67,7 +68,7 @@ where
     /// Get a list of all Service members
     pub fn get_keys(&mut self, key: &str) -> ConsulFuture<Vec<String>, T::Error> {
         let url = format!("/v1/kv/{}?keys", key);
-        let request = match self.build(&url, Method::GET, Vec::new()) {
+        let request = match self.build(&url, Method::GET, Bytes::new()) {
             Ok(req) => req,
             Err(e) => return Box::new(future::lazy(move || Box::new(future::err(e)))),
         };
@@ -76,9 +77,12 @@ where
     }
 
     /// Set a value of bytes into the key
-    pub fn set(&mut self, key: &str, value: Vec<u8>) -> ConsulFuture<bool, T::Error> {
+    pub fn set<B>(&mut self, key: &str, value: B) -> ConsulFuture<bool, T::Error>
+    where
+        B: Into<Bytes>,
+    {
         let url = format!("/v1/kv/{}", key);
-        let request = match self.build(&url, Method::PUT, value) {
+        let request = match self.build(&url, Method::PUT, value.into()) {
             Ok(req) => req,
             Err(e) => return Box::new(future::lazy(move || Box::new(future::err(e)))),
         };
@@ -89,7 +93,7 @@ where
     /// Delete a key and its value
     pub fn delete(&mut self, key: &str) -> ConsulFuture<bool, T::Error> {
         let url = format!("/v1/kv/{}", key);
-        let request = match self.build(&url, Method::DELETE, Vec::new()) {
+        let request = match self.build(&url, Method::DELETE, Bytes::new()) {
             Ok(req) => req,
             Err(e) => return Box::new(future::lazy(move || Box::new(future::err(e)))),
         };
@@ -100,7 +104,7 @@ where
     /// Get a list of nodes that have registered via the provided service
     pub fn service_nodes(&mut self, service: &str) -> ConsulFuture<Vec<ConsulService>, T::Error> {
         let url = format!("/v1/catalog/service/{}", service);
-        let request = match self.build(&url, Method::GET, Vec::new()) {
+        let request = match self.build(&url, Method::GET, Bytes::new()) {
             Ok(req) => req,
             Err(e) => return Box::new(future::lazy(move || Box::new(future::err(e)))),
         };
@@ -109,9 +113,12 @@ where
     }
 
     /// Register with the current agent with the service config
-    pub fn register(&mut self, service: Vec<u8>) -> ConsulFuture<(), T::Error> {
+    pub fn register<B>(&mut self, service: B) -> ConsulFuture<(), T::Error>
+    where
+        B: Into<Bytes>,
+    {
         let url = "/v1/agent/service/register";
-        let request = match self.build(url, Method::PUT, service) {
+        let request = match self.build(url, Method::PUT, service.into()) {
             Ok(req) => req,
             Err(e) => return Box::new(future::lazy(move || Box::new(future::err(e)))),
         };
@@ -129,7 +136,7 @@ where
         Box::new(fut)
     }
 
-    fn call<R>(&mut self, request: Request<Vec<u8>>) -> ConsulFuture<R, T::Error>
+    fn call<R>(&mut self, request: Request<Bytes>) -> ConsulFuture<R, T::Error>
     where
         for<'de> R: Deserialize<'de> + Send + 'static,
     {
@@ -141,9 +148,8 @@ where
                 Ok(res) => Self::handle_status(res),
                 Err(e) => Err(e),
             })
-            .and_then(|body| {
-                serde_json::from_slice(body.into_body().as_slice()).map_err(Error::from)
-            });
+            .and_then(|res| Ok(res.into_body()))
+            .and_then(|body| serde_json::from_slice(&body[..]).map_err(Error::from));
 
         Box::new(fut)
     }
@@ -152,8 +158,8 @@ where
         &self,
         url: &str,
         method: Method,
-        body: Vec<u8>,
-    ) -> Result<Request<Vec<u8>>, Error<T::Error>> {
+        body: Bytes,
+    ) -> Result<Request<Bytes>, Error<T::Error>> {
         let uri = Uri::builder()
             .scheme(self.scheme.as_str())
             .authority(self.authority.as_str())
@@ -167,7 +173,7 @@ where
             .map_err(Error::from)
     }
 
-    fn handle_status(response: Response<Vec<u8>>) -> Result<Response<Vec<u8>>, Error<T::Error>> {
+    fn handle_status(response: Response<Bytes>) -> Result<Response<Bytes>, Error<T::Error>> {
         let status = response.status();
 
         if status.is_success() | status.is_redirection() | status.is_informational() {
@@ -175,10 +181,12 @@ where
         } else if status == StatusCode::NOT_FOUND {
             Err(Error::NotFound)
         } else if status.is_client_error() {
-            let body = String::from_utf8(response.into_body())?;
+            let body = response.into_body();
+            let body = String::from_utf8_lossy(&body[..]).into_owned();
             Err(Error::ConsulClient(body))
         } else if status.is_server_error() {
-            let body = String::from_utf8(response.into_body())?;
+            let body = response.into_body();
+            let body = String::from_utf8_lossy(&body[..]).into_owned();
             Err(Error::ConsulServer(body))
         } else {
             unreachable!("This is a bug!")
