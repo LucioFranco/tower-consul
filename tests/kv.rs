@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 use tokio::runtime::Runtime;
 use tower_consul::Consul;
 use tower_util::ServiceFn;
+use bytes::Bytes;
 
 static CONSUL_ADDRESS: &'static str = "127.0.0.1:8500";
 
@@ -164,11 +165,11 @@ fn register_service() {
     assert!(response.is_ok());
 }
 
-type ResponseFuture = Box<Future<Item = Response<Vec<u8>>, Error = hyper::Error> + Send + 'static>;
+type ResponseFuture = Box<Future<Item = Response<Bytes>, Error = hyper::Error> + Send + 'static>;
 
 fn client<F>(f: F) -> Consul<ServiceFn<F>>
 where
-    F: Fn(Request<Vec<u8>>) -> ResponseFuture + Send + 'static,
+    F: Fn(Request<Bytes>) -> ResponseFuture + Send + 'static,
 {
     let hyper = ServiceFn::new(f);
 
@@ -178,7 +179,7 @@ where
     }
 }
 
-fn hyper(req: Request<Vec<u8>>) -> ResponseFuture {
+fn hyper(req: Request<Bytes>) -> ResponseFuture {
     let client = Client::new();
 
     let fut = client
@@ -193,7 +194,7 @@ fn hyper(req: Request<Vec<u8>>) -> ResponseFuture {
             Ok(Response::builder()
                 .status(status)
                 // .headers(headers)
-                .body(body.to_vec())
+                .body(Bytes::from(body))
                 .unwrap())
         });
 
