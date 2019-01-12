@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use futures::{future, Future, Stream};
 use hyper::{Body, Client, Request, Response};
 use serde::Serialize;
@@ -6,7 +7,6 @@ use std::process::{Command, Stdio};
 use tokio::runtime::Runtime;
 use tower_consul::Consul;
 use tower_util::ServiceFn;
-use bytes::Bytes;
 
 static CONSUL_ADDRESS: &'static str = "127.0.0.1:8500";
 
