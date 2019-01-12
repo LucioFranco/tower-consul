@@ -2,6 +2,7 @@ use futures::{future, Future, Stream};
 use hyper::{Body, Client, Request, Response};
 use tower_consul::Consul;
 use tower_util::ServiceFn;
+use bytes::Bytes;
 
 static CONSUL_ADDRESS: &'static str = "127.0.0.1:8500";
 
@@ -26,7 +27,7 @@ fn get_services() -> impl Future<Item = (), Error = ()> {
         .map_err(|e| panic!("{:?}", e))
 }
 
-fn hyper(req: Request<Vec<u8>>) -> impl Future<Item = Response<Vec<u8>>, Error = hyper::Error> {
+fn hyper(req: Request<Bytes>) -> impl Future<Item = Response<Bytes>, Error = hyper::Error> {
     let client = Client::new();
 
     client
@@ -38,7 +39,7 @@ fn hyper(req: Request<Vec<u8>>) -> impl Future<Item = Response<Vec<u8>>, Error =
         .and_then(|(body, status)| {
             Ok(Response::builder()
                 .status(status)
-                .body(body.to_vec())
+                .body(body.into())
                 .unwrap())
         })
 }
