@@ -3,17 +3,21 @@
 #![warn(missing_docs)]
 
 use bytes::Bytes;
-use futures::{future, Future};
+use futures::{
+    future::{self, Either},
+    try_ready, Async, Future, Poll,
+};
 use http::{Method, Request, Response, StatusCode, Uri};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::marker::PhantomData;
 use std::string::FromUtf8Error;
-use tower_buffer::{Buffer, Error as BufferError, SpawnError};
+use tower_buffer::{Buffer, Error as BufferError, ResponseFuture, SpawnError};
 use tower_http::{service::LiftService, HttpService};
 
 /// The future returned by Consul requests where `T` is the response
-/// and `E` is the inner Http error.
-pub type ConsulFuture<T, E> = Box<Future<Item = T, Error = Error<E>> + Send>;
+/// and `E` is the inner Http error and a Box allocation is needed.
+pub type BoxConsulFuture<T, E> = Box<Future<Item = T, Error = Error<E>> + Send>;
 
 /// Create new [Consul][consul] service that will talk with
 /// the consul agent api. It takes some `HttpService` that takes
@@ -31,6 +35,19 @@ where
     authority: String,
     inner: Buffer<LiftService<T>, Request<Bytes>>,
 }
+
+/// The future that represents the eventual value
+/// returned from the consul request.
+pub struct ConsulFuture<T, R>
+where
+    for<'de> R: Deserialize<'de> + Send + 'static,
+    T: HttpService<Bytes, ResponseBody = Bytes>,
+{
+    inner: ResponseFuture<T::Future>,
+    _pd: PhantomData<R>,
+}
+
+// == impl Consul ===
 
 impl<T> Consul<T>
 where
@@ -55,65 +72,75 @@ where
     }
 
     /// Get a list of all Service members
-    pub fn get(&mut self, key: &str) -> ConsulFuture<Vec<KVValue>, T::Error> {
+    pub fn get(&mut self, key: &str) -> impl Future<Item = Vec<KVValue>, Error = Error<T::Error>> {
         let url = format!("/v1/kv/{}", key);
         let request = match self.build(&url, Method::GET, Bytes::new()) {
             Ok(req) => req,
-            Err(e) => return Box::new(future::lazy(move || Box::new(future::err(e)))),
+            Err(e) => return Either::A(future::err(e)),
         };
 
-        self.call(request)
+        Either::B(self.call(request))
     }
 
     /// Get a list of all Service members
-    pub fn get_keys(&mut self, key: &str) -> ConsulFuture<Vec<String>, T::Error> {
+    pub fn get_keys(
+        &mut self,
+        key: &str,
+    ) -> impl Future<Item = Vec<String>, Error = Error<T::Error>> {
         let url = format!("/v1/kv/{}?keys", key);
         let request = match self.build(&url, Method::GET, Bytes::new()) {
             Ok(req) => req,
-            Err(e) => return Box::new(future::lazy(move || Box::new(future::err(e)))),
+            Err(e) => return Either::A(future::err(e)),
         };
 
-        self.call(request)
+        Either::B(self.call(request))
     }
 
     /// Set a value of bytes into the key
-    pub fn set<B>(&mut self, key: &str, value: B) -> ConsulFuture<bool, T::Error>
+    pub fn set<B>(
+        &mut self,
+        key: &str,
+        value: B,
+    ) -> impl Future<Item = bool, Error = Error<T::Error>>
     where
         B: Into<Bytes>,
     {
         let url = format!("/v1/kv/{}", key);
         let request = match self.build(&url, Method::PUT, value.into()) {
             Ok(req) => req,
-            Err(e) => return Box::new(future::lazy(move || Box::new(future::err(e)))),
+            Err(e) => return Either::A(future::err(e)),
         };
 
-        self.call(request)
+        Either::B(self.call(request))
     }
 
     /// Delete a key and its value
-    pub fn delete(&mut self, key: &str) -> ConsulFuture<bool, T::Error> {
+    pub fn delete(&mut self, key: &str) -> impl Future<Item = bool, Error = Error<T::Error>> {
         let url = format!("/v1/kv/{}", key);
         let request = match self.build(&url, Method::DELETE, Bytes::new()) {
             Ok(req) => req,
-            Err(e) => return Box::new(future::lazy(move || Box::new(future::err(e)))),
+            Err(e) => return Either::A(future::err(e)),
         };
 
-        self.call(request)
+        Either::B(self.call(request))
     }
 
     /// Get a list of nodes that have registered via the provided service
-    pub fn service_nodes(&mut self, service: &str) -> ConsulFuture<Vec<ConsulService>, T::Error> {
+    pub fn service_nodes(
+        &mut self,
+        service: &str,
+    ) -> impl Future<Item = Vec<ConsulService>, Error = Error<T::Error>> {
         let url = format!("/v1/catalog/service/{}", service);
         let request = match self.build(&url, Method::GET, Bytes::new()) {
             Ok(req) => req,
-            Err(e) => return Box::new(future::lazy(move || Box::new(future::err(e)))),
+            Err(e) => return Either::A(future::err(e)),
         };
 
-        self.call(request)
+        Either::B(self.call(request))
     }
 
     /// Register with the current agent with the service config
-    pub fn register<B>(&mut self, service: B) -> ConsulFuture<(), T::Error>
+    pub fn register<B>(&mut self, service: B) -> BoxConsulFuture<(), T::Error>
     where
         B: Into<Bytes>,
     {
@@ -136,22 +163,16 @@ where
         Box::new(fut)
     }
 
-    fn call<R>(&mut self, request: Request<Bytes>) -> ConsulFuture<R, T::Error>
+    fn call<R>(&mut self, request: Request<Bytes>) -> ConsulFuture<T, R>
     where
         for<'de> R: Deserialize<'de> + Send + 'static,
     {
-        let fut = self
-            .inner
-            .call(request)
-            .map_err(|e| Error::Inner(e))
-            .then(|res| match res {
-                Ok(res) => Self::handle_status(res),
-                Err(e) => Err(e),
-            })
-            .and_then(|res| Ok(res.into_body()))
-            .and_then(|body| serde_json::from_slice(&body[..]).map_err(Error::from));
+        let fut = self.inner.call(request);
 
-        Box::new(fut)
+        ConsulFuture {
+            inner: fut,
+            _pd: PhantomData,
+        }
     }
 
     fn build(
@@ -237,6 +258,43 @@ impl<E> From<http::Error> for Error<E> {
 impl<E, T> From<tower_buffer::SpawnError<T>> for Error<E> {
     fn from(_: SpawnError<T>) -> Self {
         Error::SpawnError
+    }
+}
+
+// == impl ConsulFuture ==
+
+impl<T, R> Future for ConsulFuture<T, R>
+where
+    for<'de> R: Deserialize<'de> + Send + 'static,
+    T: HttpService<Bytes, ResponseBody = Bytes>,
+{
+    type Item = R;
+    type Error = Error<T::Error>;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let response = try_ready!(self.inner.poll().map_err(|e| Error::Inner(e)));
+
+        let status = response.status();
+
+        let body = if status.is_success() | status.is_redirection() | status.is_informational() {
+            response.into_body()
+        } else if status == StatusCode::NOT_FOUND {
+            return Err(Error::NotFound);
+        } else if status.is_client_error() {
+            let body = response.into_body();
+            let body = String::from_utf8_lossy(&body[..]).into_owned();
+            return Err(Error::ConsulClient(body));
+        } else if status.is_server_error() {
+            let body = response.into_body();
+            let body = String::from_utf8_lossy(&body[..]).into_owned();
+            return Err(Error::ConsulServer(body));
+        } else {
+            unreachable!("This is a bug!")
+        };
+
+        let body = serde_json::from_slice(&body[..])?;
+
+        Ok(Async::Ready(body))
     }
 }
 
