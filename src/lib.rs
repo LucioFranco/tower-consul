@@ -97,14 +97,11 @@ where
     }
 
     /// Set a value of bytes into the key
-    pub fn set<B>(
+    pub fn set(
         &mut self,
         key: &str,
-        value: B,
-    ) -> impl Future<Item = bool, Error = Error<T::Error>>
-    where
-        B: Into<Bytes>,
-    {
+        value: impl Into<Bytes>,
+    ) -> impl Future<Item = bool, Error = Error<T::Error>> {
         let url = format!("/v1/kv/{}", key);
         let request = match self.build(&url, Method::PUT, value.into()) {
             Ok(req) => req,
@@ -140,10 +137,7 @@ where
     }
 
     /// Register with the current agent with the service config
-    pub fn register<B>(&mut self, service: B) -> BoxConsulFuture<(), T::Error>
-    where
-        B: Into<Bytes>,
-    {
+    pub fn register(&mut self, service: impl Into<Bytes>) -> BoxConsulFuture<(), T::Error> {
         let url = "/v1/agent/service/register";
         let request = match self.build(url, Method::PUT, service.into()) {
             Ok(req) => req,
