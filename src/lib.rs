@@ -40,7 +40,7 @@ where
 /// returned from the consul request.
 pub struct ConsulFuture<T, R>
 where
-    for<'de> R: Deserialize<'de> + Send + 'static,
+    for<'de> R: Deserialize<'de>,
     T: HttpService<Bytes, ResponseBody = Bytes>,
 {
     inner: ResponseFuture<T::Future>,
