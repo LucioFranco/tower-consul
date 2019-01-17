@@ -42,8 +42,9 @@ pub struct ConsulFuture<T, R>
 where
     for<'de> R: Deserialize<'de>,
     T: HttpService<Bytes, ResponseBody = Bytes>,
+    T::Error: Sync,
 {
-    inner: ResponseFuture<T::Future>,
+    inner: ResponseFuture<T::Future, T::Error>,
     _pd: PhantomData<R>,
 }
 
@@ -53,7 +54,7 @@ impl<T> Consul<T>
 where
     T: HttpService<Bytes, ResponseBody = Bytes> + Send + 'static,
     T::Future: Send + 'static,
-    T::Error: Send + 'static,
+    T::Error: Send + Sync + 'static,
 {
     /// Create a new consul client
     pub fn new(
@@ -261,6 +262,7 @@ impl<T, R> Future for ConsulFuture<T, R>
 where
     for<'de> R: Deserialize<'de> + Send + 'static,
     T: HttpService<Bytes, ResponseBody = Bytes>,
+    T::Error: Sync,
 {
     type Item = R;
     type Error = Error<T::Error>;
