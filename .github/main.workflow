@@ -1,6 +1,6 @@
-workflow "Build example project" {
+workflow "Build tower-consul project" {
   on = "push"
-  resolves = ["Release"]
+  resolves = ["Build"]
 }
 
 action "Format" {
