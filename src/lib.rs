@@ -26,7 +26,6 @@ pub type BoxConsulFuture<T, E> = Box<Future<Item = T, Error = Error<E>> + Send>;
 /// Currently only the KV api is available, with more to come.
 ///
 /// [consul]: https://www.hashicorp.com/products/consul
-#[derive(Clone)]
 pub struct Consul<T>
 where
     T: HttpService<Bytes>,
@@ -34,6 +33,19 @@ where
     scheme: String,
     authority: String,
     inner: Buffer<LiftService<T>, Request<Bytes>>,
+}
+
+impl<T> Clone for Consul<T>
+where
+    T: HttpService<Bytes>,
+{
+    fn clone(&self) -> Self {
+        Consul {
+            scheme: self.scheme.clone(),
+            authority: self.authority.clone(),
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 /// The future that represents the eventual value
