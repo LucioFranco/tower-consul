@@ -12,9 +12,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::string::FromUtf8Error;
-use tower_buffer::Buffer;
 use tower_buffer::error::{Error as BufferError, SpawnError};
 use tower_buffer::future::ResponseFuture;
+use tower_buffer::Buffer;
 use tower_http::{service::LiftService, HttpService};
 
 /// The future returned by Consul requests where `T` is the response
