@@ -12,7 +12,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::string::FromUtf8Error;
-use tower_buffer::{Buffer, Error as BufferError, ResponseFuture, SpawnError};
+use tower_buffer::Buffer;
+use tower_buffer::error::{Error as BufferError, SpawnError};
+use tower_buffer::future::ResponseFuture;
 use tower_http::{service::LiftService, HttpService};
 
 /// The future returned by Consul requests where `T` is the response
@@ -262,7 +264,7 @@ impl<E> From<http::Error> for Error<E> {
     }
 }
 
-impl<E, T> From<tower_buffer::SpawnError<T>> for Error<E> {
+impl<E, T> From<tower_buffer::error::SpawnError<T>> for Error<E> {
     fn from(_: SpawnError<T>) -> Self {
         Error::SpawnError
     }
