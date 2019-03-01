@@ -253,7 +253,7 @@ impl From<http::Error> for Error {
     }
 }
 
-impl<T> From<tower_buffer::error::SpawnError<T>> for Error {
+impl<E, T> From<SpawnError<T>> for Error<E> {
     fn from(_: SpawnError<T>) -> Self {
         Error::SpawnError
     }
