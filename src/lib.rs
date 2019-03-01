@@ -3,21 +3,24 @@
 #![warn(missing_docs)]
 
 use bytes::Bytes;
-use futures::{Async, Poll, Future, try_ready};
 use futures::future::{self, Either};
+use futures::{try_ready, Async, Future, Poll};
 use http::{Method, Request, Response, StatusCode, Uri};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::string::FromUtf8Error;
-use tower_buffer::Buffer;
 use tower_buffer::error::SpawnError;
 use tower_buffer::future::ResponseFuture;
+use tower_buffer::Buffer;
 use tower_http::{service::LiftService, HttpService};
 
 /// The future returned by Consul requests where `T` is the response
 /// and `E` is the inner Http error and a Box allocation is needed.
 pub type BoxConsulFuture<T> = Box<Future<Item = T, Error = Error> + Send>;
+
+/// Standard box error type
+pub type BoxError = Box<std::error::Error + Send + Sync>;
 
 /// Create new [Consul][consul] service that will talk with
 /// the consul agent api. It takes some `HttpService` that takes
@@ -55,7 +58,7 @@ where
     for<'de> R: Deserialize<'de>,
     T: HttpService<Bytes, ResponseBody = Bytes>,
     T::Future: futures::future::Future,
-    T::Error: Sync + Send,
+    T::Error: Into<BoxError>,
 {
     inner: ResponseFuture<T::Future>,
     _pd: PhantomData<R>,
@@ -67,15 +70,10 @@ impl<T> Consul<T>
 where
     T: HttpService<Bytes, ResponseBody = Bytes> + Send + 'static,
     T::Future: Send + 'static,
-    T::Error: std::error::Error + Send + Sync,
+    T::Error: Into<BoxError> + Send + Sync,
 {
     /// Create a new consul client
-    pub fn new(
-        inner: T,
-        bound: usize,
-        scheme: String,
-        authority: String,
-    ) -> Result<Self, Error> {
+    pub fn new(inner: T, bound: usize, scheme: String, authority: String) -> Result<Self, Error> {
         let inner = Buffer::new(inner.lift(), bound)?;
 
         Ok(Consul {
@@ -97,10 +95,7 @@ where
     }
 
     /// Get a list of all Service members
-    pub fn get_keys(
-        &mut self,
-        key: &str,
-    ) -> impl Future<Item = Vec<String>, Error = Error> {
+    pub fn get_keys(&mut self, key: &str) -> impl Future<Item = Vec<String>, Error = Error> {
         let url = format!("/v1/kv/{}?keys", key);
         let request = match self.build(&url, Method::GET, Bytes::new()) {
             Ok(req) => req,
@@ -183,12 +178,7 @@ where
         }
     }
 
-    fn build(
-        &self,
-        url: &str,
-        method: Method,
-        body: Bytes,
-    ) -> Result<Request<Bytes>, Error> {
+    fn build(&self, url: &str, method: Method, body: Bytes) -> Result<Request<Bytes>, Error> {
         let uri = Uri::builder()
             .scheme(self.scheme.as_str())
             .authority(self.authority.as_str())
@@ -275,7 +265,7 @@ impl<T, R> Future for ConsulFuture<T, R>
 where
     for<'de> R: Deserialize<'de> + Send + 'static,
     T: HttpService<Bytes, ResponseBody = Bytes>,
-    T::Error: Sync + Send,
+    T::Error: Into<BoxError>,
 {
     type Item = R;
     type Error = Error;
