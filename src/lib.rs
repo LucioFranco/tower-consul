@@ -10,10 +10,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::string::FromUtf8Error;
+
 use tower_buffer::error::SpawnError;
 use tower_buffer::future::ResponseFuture;
 use tower_buffer::Buffer;
-use tower_http::{service::LiftService, HttpService};
+use tower_http_service::{util::IntoService, HttpService};
 
 /// The future returned by Consul requests where `T` is the response
 /// and `E` is the inner Http error and a Box allocation is needed.
@@ -35,7 +36,7 @@ where
 {
     scheme: String,
     authority: String,
-    inner: Buffer<LiftService<T>, Request<Bytes>>,
+    inner: Buffer<IntoService<T>, Request<Bytes>>,
 }
 
 impl<T> Clone for Consul<T>
@@ -74,7 +75,7 @@ where
 {
     /// Create a new consul client
     pub fn new(inner: T, bound: usize, scheme: String, authority: String) -> Result<Self, Error> {
-        let inner = Buffer::new(inner.lift(), bound)?;
+        let inner = Buffer::new(inner.into_service(), bound)?;
 
         Ok(Consul {
             scheme,
