@@ -254,9 +254,15 @@ impl From<http::Error> for Error {
     }
 }
 
-impl<T> From<SpawnError<T>> for Error {
-    fn from(_: SpawnError<T>) -> Self {
+impl From<SpawnError> for Error {
+    fn from(_: SpawnError) -> Self {
         Error::SpawnError
+    }
+}
+
+impl From<Box<dyn std::error::Error + Send + Sync>> for Error {
+    fn from(e: Box<dyn std::error::Error + Send + Sync>) -> Self {
+        Error::Inner(e)
     }
 }
 
