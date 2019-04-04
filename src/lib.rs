@@ -14,7 +14,8 @@ use std::string::FromUtf8Error;
 use tower_buffer::error::SpawnError;
 use tower_buffer::future::ResponseFuture;
 use tower_buffer::Buffer;
-use tower_http_service::{util::IntoService, HttpService};
+use tower_http::HttpService;
+use tower_http_util::service::IntoService;
 
 /// The future returned by Consul requests where `T` is the response
 /// and `E` is the inner Http error and a Box allocation is needed.
