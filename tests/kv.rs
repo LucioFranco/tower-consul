@@ -6,7 +6,7 @@ use std::panic;
 use std::process::{Command, Stdio};
 use tokio::runtime::Runtime;
 use tower_consul::Consul;
-use tower_service_util::ServiceFn;
+use tower_util::ServiceFn;
 
 static CONSUL_ADDRESS: &'static str = "127.0.0.1:8500";
 

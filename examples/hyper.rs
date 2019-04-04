@@ -2,7 +2,7 @@ use bytes::Bytes;
 use futures::{future, Future, Stream};
 use hyper::{Body, Client, Request, Response};
 use tower_consul::Consul;
-use tower_service_util::ServiceFn;
+use tower_util::ServiceFn;
 
 static CONSUL_ADDRESS: &'static str = "127.0.0.1:8500";
 
