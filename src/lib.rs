@@ -76,7 +76,7 @@ where
 {
     /// Create a new consul client
     pub fn new(inner: T, bound: usize, scheme: String, authority: String) -> Result<Self, Error> {
-        let inner = Buffer::new(inner.into_service(), bound)?;
+        let inner = Buffer::new(inner.into_service(), bound);
 
         Ok(Consul {
             scheme,

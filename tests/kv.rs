@@ -6,7 +6,7 @@ use std::panic;
 use std::process::{Command, Stdio};
 use tokio::runtime::Runtime;
 use tower_consul::Consul;
-use tower_util::ServiceFn;
+use tower_util::{service_fn, ServiceFn};
 
 static CONSUL_ADDRESS: &'static str = "127.0.0.1:8500";
 
@@ -171,7 +171,7 @@ fn client<F>(f: F) -> Consul<ServiceFn<F>>
 where
     F: Fn(Request<Bytes>) -> ResponseFuture + Send + 'static,
 {
-    let hyper = ServiceFn::new(f);
+    let hyper = service_fn(f);
 
     match Consul::new(hyper, 100, "http".into(), CONSUL_ADDRESS.into()) {
         Ok(c) => c,

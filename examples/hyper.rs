@@ -2,7 +2,7 @@ use bytes::Bytes;
 use futures::{future, Future, Stream};
 use hyper::{Body, Client, Request, Response};
 use tower_consul::Consul;
-use tower_util::ServiceFn;
+use tower_util::service_fn;
 
 static CONSUL_ADDRESS: &'static str = "127.0.0.1:8500";
 
@@ -11,7 +11,7 @@ fn main() {
 }
 
 fn get_services() -> impl Future<Item = (), Error = ()> {
-    let hyper = ServiceFn::new(hyper);
+    let hyper = service_fn(hyper);
 
     let mut consul = match Consul::new(hyper, 100, "http".into(), CONSUL_ADDRESS.into()) {
         Ok(c) => c,
